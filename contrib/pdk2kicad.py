@@ -212,10 +212,7 @@ KISYM_TEMPLATE = env.from_string('''\
 
 
 def _setup_logging(args: Namespace = None) -> None:
-	level = log.INFO
-	if args is not None and args.verbose:
-		level = log.DEBUG
-
+	level = log.DEBUG if args is not None and args.verbose else log.INFO
 	log.basicConfig(
 		force    = True,
 		format   = '%(message)s',
@@ -254,7 +251,7 @@ class Cell:
 				pwr += 1
 			elif pin.type == PinType.GROUND:
 				gnd += 1
-			elif pin.type == PinType.SIGNAL or pin.type == PinType.CLOCK:
+			elif pin.type in [PinType.SIGNAL, PinType.CLOCK]:
 				if pin.dir == PinDir.INPUT:
 					inp += 1
 				elif pin.dir == PinDir.OUTPUT:
@@ -270,7 +267,7 @@ class Cell:
 
 		for pin in self.pins:
 			nlen = len(pin.name)
-			if pin.type == PinType.POWER or pin.type == PinType.GROUND:
+			if pin.type in [PinType.POWER, PinType.GROUND]:
 				hpad = max(hpad, nlen)
 			else:
 				wpad = max(wpad, nlen)
@@ -328,7 +325,7 @@ class Cell:
 		pin_idx = 0
 		inp_y = y0 + 2.54
 		for pin in self.pins:
-			if (pin.type == PinType.SIGNAL or pin.type == PinType.CLOCK) and pin.dir == PinDir.INPUT:
+			if pin.type in [PinType.SIGNAL, PinType.CLOCK] and pin.dir == PinDir.INPUT:
 				pin.set_x(x0 - 2.54)
 				inp_y = (y1 - (2.54 * (pin_idx + 1)) - self._padding[1])
 				pin.set_y(inp_y)
@@ -337,7 +334,7 @@ class Cell:
 		pin_idx = 0
 		out_y = y0 + 2.54
 		for pin in self.pins:
-			if (pin.type == PinType.SIGNAL or pin.type == PinType.CLOCK) and pin.dir == PinDir.OUTPUT:
+			if pin.type in [PinType.SIGNAL, PinType.CLOCK] and pin.dir == PinDir.OUTPUT:
 				pin.set_x(x1 + 2.54)
 				out_y = (y1 - (2.54 * (pin_idx + 1)) - self._padding[1])
 				pin.set_y(out_y)
@@ -349,8 +346,8 @@ class Cell:
 
 		rot = 0
 		for pin in self.pins:
-			if pin.type == PinType.SIGNAL or pin.type == PinType.CLOCK:
-				if pin.dir == PinDir.BIDIRECTIONAL or pin.dir == PinDir.PASSIVE:
+			if pin.type in [PinType.SIGNAL, PinType.CLOCK]:
+				if pin.dir in [PinDir.BIDIRECTIONAL, PinDir.PASSIVE]:
 					if iop_remaining > 0:
 						if inp_y < out_y:
 							pin.set_x(x1 + 2.54)
@@ -368,19 +365,18 @@ class Cell:
 							out_y += 2.54
 
 						iop_remaining -= 1
+					elif rot == 0:
+						pin.set_x(x0 - 2.54)
+						pin.set_y(inp_y)
+						pin.set_rot(rot)
+						inp_y += 2.54
+						rot = 180
 					else:
-						if rot == 0:
-							pin.set_x(x0 - 2.54)
-							pin.set_y(inp_y)
-							pin.set_rot(rot)
-							inp_y += 2.54
-							rot = 180
-						else:
-							pin.set_x(x1 + 2.54)
-							pin.set_y(out_y)
-							pin.set_rot(rot)
-							out_y += 2.54
-							rot = 0
+						pin.set_x(x1 + 2.54)
+						pin.set_y(out_y)
+						pin.set_rot(rot)
+						out_y += 2.54
+						rot = 0
 
 	def _fixup_properties(self):
 		for prop in self.properties:
@@ -483,9 +479,9 @@ class PinDir(Enum):
 			return PinDir.OUTPUT
 		elif 'tristate' in normalized:
 			return PinDir.TRISTATE
-		elif normalized == 'bidirectional' or normalized == 'inout':
+		elif normalized in ['bidirectional', 'inout']:
 			return PinDir.BIDIRECTIONAL
-		elif normalized == 'passive' or normalized == 'feedthru':
+		elif normalized in ['passive', 'feedthru']:
 			return PinDir.PASSIVE
 		else:
 			return PinDir.UNSPECIFIED
@@ -539,21 +535,20 @@ class Pin:
 		self.pos = (self.pos[0], self.pos[1], r)
 
 	def electrical_type(self):
-		if self.type == PinType.POWER or self.type == PinType.GROUND:
+		if self.type in [PinType.POWER, PinType.GROUND]:
 			return 'power_in'
+		if self.dir == PinDir.INPUT:
+			return 'input'
+		elif self.dir == PinDir.OUTPUT:
+			return 'output'
+		elif self.dir == PinDir.TRISTATE:
+			return 'tristate'
+		elif self.dir == PinDir.BIDIRECTIONAL:
+			return 'bidirectional'
+		elif self.dir == PinDir.PASSIVE:
+			return 'passive'
 		else:
-			if self.dir == PinDir.INPUT:
-				return 'input'
-			elif self.dir == PinDir.OUTPUT:
-				return 'output'
-			elif self.dir == PinDir.TRISTATE:
-				return 'tristate'
-			elif self.dir == PinDir.BIDIRECTIONAL:
-				return 'bidirectional'
-			elif self.dir == PinDir.PASSIVE:
-				return 'passive'
-			else:
-				return 'unspecified'
+			return 'unspecified'
 
 	def graphical_style(self):
 		if self.is_clk():
